@@ -9,8 +9,8 @@ from tagformatter.tag_mapping import DEFAULT_TAG_MAPPINGS
 def test_load_tag_rows_supports_alias_columns(tmp_path: Path) -> None:
     csv_path = tmp_path / "tags.csv"
     csv_path.write_text(
-        "file_path,Disc,Track,Artist,Composer,Title,Conductor\n"
-        "disc1/01.flac,2,1,Artist A,Composer A,Title A,Conductor A\n",
+        "file_path,Disc,Track,Album Artist,Artist,Composer,Performer,Title,Conductor\n"
+        "disc1/01.flac,2,1,Album Artist A,Artist A,Composer A,Performer A,Title A,Conductor A\n",
         encoding="utf-8",
     )
 
@@ -22,8 +22,10 @@ def test_load_tag_rows_supports_alias_columns(tmp_path: Path) -> None:
     assert rows[0].disc_number == 2
     assert rows[0].track_number == 1
     assert rows[0].tags == {
+        "album_artist": "Album Artist A",
         "artist_name": "Artist A",
         "composer": "Composer A",
+        "performer": "Performer A",
         "track_title": "Title A",
         "conductor": "Conductor A",
     }
@@ -55,4 +57,4 @@ def test_write_template_csv_writes_expected_headers(tmp_path: Path) -> None:
 
     write_template_csv(csv_path, DEFAULT_TAG_MAPPINGS)
 
-    assert csv_path.read_text(encoding="utf-8") == "disc,track,file_path,artist_name,composer,track_title,conductor\n"
+    assert csv_path.read_text(encoding="utf-8") == "disc,track,file_path,album_artist,artist_name,composer,performer,track_title,conductor\n"

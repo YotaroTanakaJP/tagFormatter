@@ -27,8 +27,10 @@ python3 -m venv .venv
 
 任意列:
 
+- `album_artist`
 - `artist_name`
 - `composer`
+- `performer`
 - `track_title`
 - `conductor`
 
@@ -36,8 +38,10 @@ python3 -m venv .venv
 
 互換用エイリアスとして、以下の列名も受け付けます。
 
+- `Album Artist` -> `album_artist`
 - `Artist` -> `artist_name`
 - `Composer` -> `composer`
+- `Performer` -> `performer`
 - `Title` -> `track_title`
 - `Conductor` -> `conductor`
 

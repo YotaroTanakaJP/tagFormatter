@@ -11,8 +11,10 @@ class TagDefinition:
 
 
 DEFAULT_TAG_MAPPINGS: Dict[str, TagDefinition] = {
+    "album_artist": TagDefinition(csv_columns=("album_artist", "Album Artist", "AlbumArtist"), flac_key="ALBUMARTIST"),
     "artist_name": TagDefinition(csv_columns=("artist_name", "Artist Name", "Artist"), flac_key="ARTIST"),
     "composer": TagDefinition(csv_columns=("composer", "Composer"), flac_key="COMPOSER"),
+    "performer": TagDefinition(csv_columns=("performer", "Performer"), flac_key="PERFORMER"),
     "track_title": TagDefinition(csv_columns=("track_title", "Track Title", "Title"), flac_key="TITLE"),
     "conductor": TagDefinition(csv_columns=("conductor", "Conductor"), flac_key="CONDUCTOR"),
 }
