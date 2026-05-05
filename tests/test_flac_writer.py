@@ -44,6 +44,25 @@ def test_apply_rows_maps_album_dir_by_track_number(tmp_path: Path) -> None:
     assert [result.resolved_path.name for result in results] == ["02 Finale.flac", "01 Opening.flac"]
 
 
+def test_apply_rows_includes_empty_tag_values_in_updates(tmp_path: Path) -> None:
+    csv_path = tmp_path / "tags.csv"
+    flac_path = tmp_path / "track.flac"
+    flac_path.write_bytes(b"")
+    row = TagRow(
+        source_line=2,
+        file_path="track.flac",
+        disc_number=None,
+        track_number=None,
+        tags={"artist_name": "", "track_title": "Title A"},
+    )
+
+    results, errors = apply_rows([row], DEFAULT_TAG_MAPPINGS, csv_path=csv_path, dry_run=True)
+
+    assert not errors
+    assert len(results) == 1
+    assert results[0].updated_tags == {"ARTIST": "", "TITLE": "Title A"}
+
+
 def test_build_album_track_map_falls_back_to_sorted_order(tmp_path: Path) -> None:
     album_dir = tmp_path / "Album"
     album_dir.mkdir()

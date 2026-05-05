@@ -70,8 +70,7 @@ def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> t
                     continue
 
                 normalized_value = (value or "").strip()
-                if normalized_value:
-                    tags[canonical_name] = normalized_value
+                tags[canonical_name] = normalized_value
 
             rows.append(
                 TagRow(
