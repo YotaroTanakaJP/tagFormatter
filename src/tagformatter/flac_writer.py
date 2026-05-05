@@ -6,7 +6,7 @@ from typing import Iterable, Mapping
 
 from mutagen.flac import FLAC, FLACNoHeaderError
 
-from .models import ProcessError, ProcessResult, TagRow
+from .models import ProcessError, ProcessResult, TagOperation, TagRow
 from .tag_mapping import TagDefinition
 
 
@@ -101,25 +101,58 @@ def _apply_tags_to_path(
     if not resolved_path.exists():
         raise FileNotFoundError(f"FLAC file not found: {resolved_path}")
 
-    updated_tags = {
-        definitions[tag_name].flac_key: tag_value
-        for tag_name, tag_value in row.tags.items()
-        if tag_name in definitions
-    }
+    updated_tags, cleared_tags = _build_tag_changes(row.tags, definitions)
 
     if dry_run:
-        return ProcessResult(row=row, resolved_path=resolved_path, updated_tags=updated_tags, dry_run=True)
+        return ProcessResult(
+            row=row,
+            resolved_path=resolved_path,
+            updated_tags=updated_tags,
+            cleared_tags=cleared_tags,
+            dry_run=True,
+        )
 
     try:
         audio = FLAC(str(resolved_path))
     except FLACNoHeaderError as exc:
         raise ValueError(f"Invalid FLAC file: {resolved_path}") from exc
 
-    for tag_key, tag_value in updated_tags.items():
-        audio[tag_key] = [tag_value]
+    for tag_key in cleared_tags:
+        if tag_key in audio:
+            del audio[tag_key]
+
+    for tag_key, tag_values in updated_tags.items():
+        audio[tag_key] = list(tag_values)
     audio.save()
 
-    return ProcessResult(row=row, resolved_path=resolved_path, updated_tags=updated_tags, dry_run=False)
+    return ProcessResult(
+        row=row,
+        resolved_path=resolved_path,
+        updated_tags=updated_tags,
+        cleared_tags=cleared_tags,
+        dry_run=False,
+    )
+
+
+def _build_tag_changes(
+    operations: Mapping[str, TagOperation], definitions: Mapping[str, TagDefinition]
+) -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]]:
+    updated_tags: dict[str, tuple[str, ...]] = {}
+    cleared_tag_keys: list[str] = []
+
+    for tag_name, operation in operations.items():
+        definition = definitions.get(tag_name)
+        if definition is None:
+            continue
+
+        if operation.is_clear:
+            cleared_tag_keys.append(definition.flac_key)
+            continue
+
+        if operation.is_set:
+            updated_tags[definition.flac_key] = operation.values
+
+    return updated_tags, tuple(cleared_tag_keys)
 
 
 def apply_row_to_flac(

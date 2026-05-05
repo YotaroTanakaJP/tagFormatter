@@ -1,3 +1,3 @@
-disc,track,file_path,album_artist,artist_name,composer,performer,track_title,conductor
-7,1,disc7/01-example.flac,Various Artists,Vienna Symphony Orchestra,,Vienna Symphony Orchestra,"Voices of Spring, Op. 410",E. Binder
-7,2,disc7/02-example.flac,Various Artists,Osaka Philharmonic Orchestra,,Osaka Philharmonic Orchestra,"Symphony No. 5 in C minor, Op. 67: I. Allegro con brio",Takashi Asahina
+disc,track,file_path,album_title,album_artist,artist_name,genre,date,comment,composer,performer,track_title,conductor
+7,1,disc7/01-example.flac,Example Album,Various Artists,Vienna Symphony Orchestra,Classical,2024,,Johann Strauss II,Vienna Symphony Orchestra,"Voices of Spring, Op. 410",E. Binder
+7,2,disc7/02-example.flac,Example Album,Various Artists,Osaka Philharmonic Orchestra,Classical,2024,,Ludwig van Beethoven,Osaka Philharmonic Orchestra,"Symphony No. 5 in C minor, Op. 67: I. Allegro con brio",Takashi Asahina

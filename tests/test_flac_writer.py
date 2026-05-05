@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from tagformatter.flac_writer import apply_rows, build_album_track_map, resolve_audio_path
-from tagformatter.models import TagRow
+from tagformatter.models import TagOperation, TagRow
 from tagformatter.tag_mapping import DEFAULT_TAG_MAPPINGS
 
 
@@ -15,7 +15,13 @@ def test_resolve_audio_path_uses_base_dir(tmp_path: Path) -> None:
 
 def test_apply_rows_collects_missing_file_errors(tmp_path: Path) -> None:
     csv_path = tmp_path / "tags.csv"
-    row = TagRow(source_line=2, file_path="missing.flac", disc_number=None, track_number=None, tags={"artist_name": "Artist A"})
+    row = TagRow(
+        source_line=2,
+        file_path="missing.flac",
+        disc_number=None,
+        track_number=None,
+        tags={"artist_name": TagOperation.set(("Artist A",))},
+    )
 
     results, errors = apply_rows([row], DEFAULT_TAG_MAPPINGS, csv_path=csv_path, dry_run=True)
 
@@ -34,8 +40,8 @@ def test_apply_rows_maps_album_dir_by_track_number(tmp_path: Path) -> None:
     second_track.write_bytes(b"")
 
     rows = [
-        TagRow(source_line=2, file_path=None, disc_number=7, track_number=2, tags={"track_title": "Finale"}),
-        TagRow(source_line=3, file_path=None, disc_number=7, track_number=1, tags={"track_title": "Opening"}),
+        TagRow(source_line=2, file_path=None, disc_number=7, track_number=2, tags={"track_title": TagOperation.set(("Finale",))}),
+        TagRow(source_line=3, file_path=None, disc_number=7, track_number=1, tags={"track_title": TagOperation.set(("Opening",))}),
     ]
 
     results, errors = apply_rows(rows, DEFAULT_TAG_MAPPINGS, csv_path=csv_path, album_dir=album_dir, dry_run=True)
@@ -44,7 +50,7 @@ def test_apply_rows_maps_album_dir_by_track_number(tmp_path: Path) -> None:
     assert [result.resolved_path.name for result in results] == ["02 Finale.flac", "01 Opening.flac"]
 
 
-def test_apply_rows_includes_empty_tag_values_in_updates(tmp_path: Path) -> None:
+def test_apply_rows_supports_multi_value_updates_and_clear_operations(tmp_path: Path) -> None:
     csv_path = tmp_path / "tags.csv"
     flac_path = tmp_path / "track.flac"
     flac_path.write_bytes(b"")
@@ -53,14 +59,19 @@ def test_apply_rows_includes_empty_tag_values_in_updates(tmp_path: Path) -> None
         file_path="track.flac",
         disc_number=None,
         track_number=None,
-        tags={"artist_name": "", "track_title": "Title A"},
+        tags={
+            "artist_name": TagOperation.clear(),
+            "performer": TagOperation.set(("Performer A", "Performer B")),
+            "track_title": TagOperation.set(("Title A",)),
+        },
     )
 
     results, errors = apply_rows([row], DEFAULT_TAG_MAPPINGS, csv_path=csv_path, dry_run=True)
 
     assert not errors
     assert len(results) == 1
-    assert results[0].updated_tags == {"ARTIST": "", "TITLE": "Title A"}
+    assert results[0].updated_tags == {"PERFORMER": ("Performer A", "Performer B"), "TITLE": ("Title A",)}
+    assert results[0].cleared_tags == ("ARTIST",)
 
 
 def test_build_album_track_map_falls_back_to_sorted_order(tmp_path: Path) -> None:

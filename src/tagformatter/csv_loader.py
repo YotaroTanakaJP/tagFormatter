@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 from typing import Mapping
 
-from .models import ProcessError, TagRow
+from .models import ProcessError, TagOperation, TagRow
 from .tag_mapping import TagDefinition, build_column_lookup
 
 
@@ -14,6 +14,8 @@ class CsvFormatError(ValueError):
 
 DISC_COLUMNS = ("disc", "Disc", "disc_number", "Disc Number")
 TRACK_COLUMNS = ("track", "Track", "track_number", "Track Number")
+CLEAR_TAG_MARKER = "__CLEAR__"
+MULTI_VALUE_SEPARATOR = ";"
 
 
 def _find_header(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
@@ -33,6 +35,19 @@ def _parse_optional_int(value: str | None, label: str, line_number: int) -> int 
         return int(normalized_value)
     except ValueError as exc:
         raise CsvFormatError(f"{label} must be an integer on line {line_number}") from exc
+
+
+def _parse_tag_operation(value: str | None, column_name: str, line_number: int) -> TagOperation | None:
+    normalized_value = (value or "").strip()
+    if not normalized_value:
+        return None
+    if normalized_value == CLEAR_TAG_MARKER:
+        return TagOperation.clear()
+
+    values = tuple(part.strip() for part in normalized_value.split(MULTI_VALUE_SEPARATOR) if part.strip())
+    if not values:
+        raise CsvFormatError(f"{column_name} must include at least one value on line {line_number}")
+    return TagOperation.set(values)
 
 
 def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> tuple[list[TagRow], list[ProcessError]]:
@@ -60,7 +75,7 @@ def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> t
                 errors.append(ProcessError(source_line=line_number, file_path="", message="file_path or Track is required"))
                 continue
 
-            tags: dict[str, str] = {}
+            tags: dict[str, TagOperation] = {}
             for column_name, value in raw_row.items():
                 if column_name is None:
                     continue
@@ -69,8 +84,10 @@ def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> t
                 if canonical_name is None:
                     continue
 
-                normalized_value = (value or "").strip()
-                tags[canonical_name] = normalized_value
+                operation = _parse_tag_operation(value, column_name=column_name, line_number=line_number)
+                if operation is None:
+                    continue
+                tags[canonical_name] = operation
 
             rows.append(
                 TagRow(

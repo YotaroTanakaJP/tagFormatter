@@ -113,10 +113,12 @@ def main(argv: list[str] | None = None) -> int:
 
     for result in results:
         action = "DRY-RUN" if result.dry_run else "UPDATED"
-        if result.updated_tags:
-            changed = ", ".join(f"{key}={value}" for key, value in sorted(result.updated_tags.items()))
-        else:
-            changed = "no tag updates"
+        changes: list[str] = []
+        for key, values in sorted(result.updated_tags.items()):
+            changes.append(f"set {key}={' ; '.join(values)}")
+        for key in sorted(result.cleared_tags):
+            changes.append(f"clear {key}")
+        changed = ", ".join(changes) if changes else "no tag updates"
         print(f"[{action}] line {result.row.source_line}: {result.resolved_path} -> {changed}")
 
     all_errors = [*csv_errors, *selection_errors, *processing_errors]

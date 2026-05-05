@@ -27,23 +27,34 @@ python3 -m venv .venv
 
 任意列:
 
+- `album_title`
 - `album_artist`
 - `artist_name`
+- `genre`
+- `date`
+- `comment`
 - `composer`
 - `performer`
 - `track_title`
 - `conductor`
 
 空セルは「そのタグを変更しない」として扱います。
+既存タグを削除したい場合は、対象セルに `__CLEAR__` を指定してください。
+複数値タグは `A; B; C` のようにセミコロン区切りで指定できます。
 
 互換用エイリアスとして、以下の列名も受け付けます。
 
 - `Album Artist` -> `album_artist`
 - `Artist` -> `artist_name`
+- `Genre` -> `genre`
+- `Year` -> `date`
+- `Comment` -> `comment`
 - `Composer` -> `composer`
 - `Performer` -> `performer`
 - `Title` -> `track_title`
 - `Conductor` -> `conductor`
+
+`Disc` と `Track` は対象ファイルの選択にのみ使い、タグとしては書き込みません。
 
 現在開いているような `Disc,Track,Artist,...` 形式のCSVも、そのまま `--album-dir` と組み合わせて使えます。
 
