@@ -18,10 +18,14 @@ CLEAR_TAG_MARKER = "__CLEAR__"
 MULTI_VALUE_SEPARATOR = ";"
 
 
+def _normalize_header_name(name: str) -> str:
+    return name.strip().casefold()
+
+
 def _find_header(fieldnames: list[str], candidates: tuple[str, ...]) -> str | None:
-    normalized_headers = {name.casefold(): name for name in fieldnames}
+    normalized_headers = {_normalize_header_name(name): name for name in fieldnames}
     for candidate in candidates:
-        match = normalized_headers.get(candidate.casefold())
+        match = normalized_headers.get(_normalize_header_name(candidate))
         if match is not None:
             return match
     return None
@@ -52,7 +56,7 @@ def _parse_tag_operation(value: str | None, column_name: str, line_number: int) 
 
 def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> tuple[list[TagRow], list[ProcessError]]:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
+        reader = csv.DictReader(handle, skipinitialspace=True)
         if reader.fieldnames is None:
             raise CsvFormatError("CSV header is missing")
 
@@ -80,7 +84,7 @@ def load_tag_rows(csv_path: Path, definitions: Mapping[str, TagDefinition]) -> t
                 if column_name is None:
                     continue
 
-                canonical_name = column_lookup.get(column_name.casefold())
+                canonical_name = column_lookup.get(_normalize_header_name(column_name))
                 if canonical_name is None:
                     continue
 

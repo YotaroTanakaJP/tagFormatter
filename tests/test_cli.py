@@ -38,3 +38,15 @@ def test_select_rows_for_album_filters_disc() -> None:
     assert not errors
     assert len(selected_rows) == 1
     assert selected_rows[0].disc_number == 7
+
+
+def test_select_rows_for_album_keeps_multiple_discs_when_not_specified() -> None:
+    rows = [
+        TagRow(source_line=2, file_path=None, disc_number=1, track_number=1, tags={}),
+        TagRow(source_line=3, file_path=None, disc_number=2, track_number=1, tags={}),
+    ]
+
+    selected_rows, errors = select_rows_for_album(rows, disc_number=None)
+
+    assert not errors
+    assert selected_rows == rows

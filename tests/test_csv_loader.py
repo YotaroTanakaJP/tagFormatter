@@ -86,6 +86,44 @@ def test_load_tag_rows_supports_track_mode_without_file_path(tmp_path: Path) -> 
     assert rows[0].track_number == 3
 
 
+def test_load_tag_rows_accepts_whitespace_padded_headers(tmp_path: Path) -> None:
+    csv_path = tmp_path / "tags.csv"
+    csv_path.write_text(
+        "disc, track, album_artist , track_title\n"
+        "1, 2, Billy Joel, Piano Man\n",
+        encoding="utf-8",
+    )
+
+    rows, errors = load_tag_rows(csv_path, DEFAULT_TAG_MAPPINGS)
+
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0].disc_number == 1
+    assert rows[0].track_number == 2
+    assert rows[0].tags == {
+        "album_artist": TagOperation.set(("Billy Joel",)),
+        "track_title": TagOperation.set(("Piano Man",)),
+    }
+
+
+def test_load_tag_rows_parses_quoted_values_after_spaced_delimiters(tmp_path: Path) -> None:
+    csv_path = tmp_path / "tags.csv"
+    csv_path.write_text(
+        "disc, track, track_title\n"
+        "2, 12, \"Somewhere Along the Line (Live at The Great American Music Hall, San Francisco, CA - June 8, 1975)\"\n",
+        encoding="utf-8",
+    )
+
+    rows, errors = load_tag_rows(csv_path, DEFAULT_TAG_MAPPINGS)
+
+    assert not errors
+    assert len(rows) == 1
+    assert rows[0].track_number == 12
+    assert rows[0].tags["track_title"] == TagOperation.set(
+        ("Somewhere Along the Line (Live at The Great American Music Hall, San Francisco, CA - June 8, 1975)",)
+    )
+
+
 def test_load_tag_rows_requires_targeting_columns(tmp_path: Path) -> None:
     csv_path = tmp_path / "tags.csv"
     csv_path.write_text("Artist,Composer\nA,B\n", encoding="utf-8")

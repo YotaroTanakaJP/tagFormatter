@@ -42,14 +42,6 @@ def infer_disc_number(album_dir: Path) -> int | None:
 def select_rows_for_album(rows: list[TagRow], disc_number: int | None) -> tuple[list[TagRow], list[ProcessError]]:
     if disc_number is None:
         distinct_discs = sorted({row.disc_number for row in rows if row.disc_number is not None})
-        if len(distinct_discs) > 1:
-            return [], [
-                ProcessError(
-                    source_line=0,
-                    file_path="",
-                    message="CSV contains multiple Disc values; specify --disc or use an album path containing CD<number>",
-                )
-            ]
         if len(distinct_discs) == 1:
             disc_number = distinct_discs[0]
 

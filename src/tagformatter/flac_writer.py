@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Iterable, Mapping
 
+from mutagen import MutagenError
 from mutagen.flac import FLAC, FLACNoHeaderError
 
 from .models import ProcessError, ProcessResult, TagOperation, TagRow
@@ -11,6 +12,9 @@ from .tag_mapping import TagDefinition
 
 
 TRACK_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3})\b")
+TAG_NUMBER_PATTERN = re.compile(r"^\s*(\d{1,3})(?:\s*/\s*\d+)?\b")
+TRACK_TAG_KEYS = ("TRACKNUMBER", "TRACK")
+DISC_TAG_KEYS = ("DISCNUMBER", "DISC")
 
 
 def resolve_audio_path(file_path_value: str, base_dir: Path | None, csv_path: Path) -> Path:
@@ -40,22 +44,88 @@ def extract_track_number_from_name(filename: str) -> int | None:
     return int(match.group(1))
 
 
-def build_album_track_map(album_dir: Path, expected_track_numbers: Iterable[int]) -> dict[int, Path]:
-    flac_files = discover_album_files(album_dir)
-    if not flac_files:
-        raise ValueError(f"No .flac files found under album directory: {album_dir}")
+def _parse_number_from_tag_values(values: object) -> int | None:
+    if values is None:
+        return None
 
-    numbered_files: dict[int, Path] = {}
+    if isinstance(values, (list, tuple)):
+        if not values:
+            return None
+        raw_value = str(values[0])
+    else:
+        raw_value = str(values)
+
+    match = TAG_NUMBER_PATTERN.match(raw_value)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _read_first_tag_number(audio: FLAC, candidate_keys: tuple[str, ...]) -> int | None:
+    for key in candidate_keys:
+        parsed = _parse_number_from_tag_values(audio.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _read_disc_and_track_from_tags(path: Path) -> tuple[int | None, int] | None:
+    try:
+        audio = FLAC(str(path))
+    except (MutagenError, OSError):
+        return None
+
+    track_number = _read_first_tag_number(audio, TRACK_TAG_KEYS)
+    if track_number is None:
+        return None
+
+    disc_number = _read_first_tag_number(audio, DISC_TAG_KEYS)
+    return disc_number, track_number
+
+
+def _build_album_track_map_from_tags(flac_files: list[Path]) -> dict[tuple[int | None, int], Path] | None:
+    tagged_files: dict[tuple[int | None, int], Path] = {}
+    track_only_matches: dict[int, Path] = {}
+    ambiguous_track_numbers: set[int] = set()
+
+    for path in flac_files:
+        tag_key = _read_disc_and_track_from_tags(path)
+        if tag_key is None:
+            return None
+        if tag_key in tagged_files:
+            return None
+
+        tagged_files[tag_key] = path
+        _, track_number = tag_key
+        existing_path = track_only_matches.get(track_number)
+        if existing_path is None:
+            track_only_matches[track_number] = path
+        elif existing_path != path:
+            ambiguous_track_numbers.add(track_number)
+
+    result = dict(tagged_files)
+    for track_number, path in track_only_matches.items():
+        if track_number not in ambiguous_track_numbers:
+            result[(None, track_number)] = path
+
+    return result
+
+
+def _build_album_track_map_from_filenames(
+    flac_files: list[Path], expected_track_numbers: Iterable[int]
+) -> dict[tuple[int | None, int], Path] | None:
+    numbered_files: dict[tuple[int | None, int], Path] = {}
     all_files_have_track_numbers = True
     for path in flac_files:
         track_number = extract_track_number_from_name(path.name)
         if track_number is None:
             all_files_have_track_numbers = False
             break
-        if track_number in numbered_files:
+        track_key = (None, track_number)
+        if track_key in numbered_files:
             all_files_have_track_numbers = False
             break
-        numbered_files[track_number] = path
+        numbered_files[track_key] = path
 
     expected_numbers = sorted(set(expected_track_numbers))
     if all_files_have_track_numbers:
@@ -63,10 +133,27 @@ def build_album_track_map(album_dir: Path, expected_track_numbers: Iterable[int]
 
     contiguous_numbers = list(range(1, len(expected_numbers) + 1))
     if expected_numbers == contiguous_numbers and len(flac_files) == len(expected_numbers):
-        return {track_number: path for track_number, path in zip(expected_numbers, flac_files)}
+        return {(None, track_number): path for track_number, path in zip(expected_numbers, flac_files)}
+
+    return None
+
+
+def build_album_track_map(album_dir: Path, rows: Iterable[TagRow]) -> dict[tuple[int | None, int], Path]:
+    flac_files = discover_album_files(album_dir)
+    if not flac_files:
+        raise ValueError(f"No .flac files found under album directory: {album_dir}")
+
+    tagged_map = _build_album_track_map_from_tags(flac_files)
+    if tagged_map is not None:
+        return tagged_map
+
+    expected_track_numbers = [row.track_number for row in rows if row.track_number is not None]
+    filename_map = _build_album_track_map_from_filenames(flac_files, expected_track_numbers)
+    if filename_map is not None:
+        return filename_map
 
     raise ValueError(
-        "Could not infer track-to-file mapping from album directory; use filenames that start with track numbers or provide file_path"
+        "Could not infer track-to-file mapping from album directory; ensure FLAC DISC/TRACK tags or filename track numbers are present"
     )
 
 
@@ -74,14 +161,18 @@ def resolve_row_path(
     row: TagRow,
     csv_path: Path,
     base_dir: Path | None = None,
-    album_track_map: Mapping[int, Path] | None = None,
+    album_track_map: Mapping[tuple[int | None, int], Path] | None = None,
 ) -> Path:
     if album_track_map is not None:
         if row.track_number is None:
             raise ValueError("Track column is required when using --album-dir")
-        resolved_path = album_track_map.get(row.track_number)
+        resolved_path = album_track_map.get((row.disc_number, row.track_number))
         if resolved_path is None:
-            raise FileNotFoundError(f"No FLAC file mapped for track {row.track_number}")
+            resolved_path = album_track_map.get((None, row.track_number))
+        if resolved_path is None:
+            if row.disc_number is None:
+                raise FileNotFoundError(f"No FLAC file mapped for track {row.track_number}")
+            raise FileNotFoundError(f"No FLAC file mapped for disc {row.disc_number} track {row.track_number}")
         return resolved_path
 
     if row.file_path is None:
@@ -160,7 +251,7 @@ def apply_row_to_flac(
     definitions: Mapping[str, TagDefinition],
     csv_path: Path,
     base_dir: Path | None = None,
-    album_track_map: Mapping[int, Path] | None = None,
+    album_track_map: Mapping[tuple[int | None, int], Path] | None = None,
     dry_run: bool = False,
 ) -> ProcessResult:
     resolved_path = resolve_row_path(row, csv_path=csv_path, base_dir=base_dir, album_track_map=album_track_map)
@@ -178,11 +269,10 @@ def apply_rows(
     results: list[ProcessResult] = []
     errors: list[ProcessError] = []
     row_list = list(rows)
-    album_track_map: Mapping[int, Path] | None = None
+    album_track_map: Mapping[tuple[int | None, int], Path] | None = None
 
     if album_dir is not None:
-        track_numbers = [row.track_number for row in row_list if row.track_number is not None]
-        album_track_map = build_album_track_map(album_dir, expected_track_numbers=track_numbers)
+        album_track_map = build_album_track_map(album_dir, row_list)
 
     for row in row_list:
         try:

@@ -50,6 +50,36 @@ def test_apply_rows_maps_album_dir_by_track_number(tmp_path: Path) -> None:
     assert [result.resolved_path.name for result in results] == ["02 Finale.flac", "01 Opening.flac"]
 
 
+def test_apply_rows_maps_album_dir_by_embedded_disc_and_track_tags(tmp_path: Path, monkeypatch) -> None:
+    csv_path = tmp_path / "tags.csv"
+    album_dir = tmp_path / "Album"
+    album_dir.mkdir()
+    first_track = album_dir / "1-01 Opening.flac"
+    second_track = album_dir / "2-01 Finale.flac"
+    first_track.write_bytes(b"")
+    second_track.write_bytes(b"")
+
+    class FakeFlac(dict):
+        pass
+
+    tag_data = {
+        str(first_track): FakeFlac({"DISCNUMBER": ["1"], "TRACKNUMBER": ["1"]}),
+        str(second_track): FakeFlac({"DISCNUMBER": ["2"], "TRACKNUMBER": ["1"]}),
+    }
+
+    monkeypatch.setattr("tagformatter.flac_writer.FLAC", lambda path: tag_data[str(path)])
+
+    rows = [
+        TagRow(source_line=2, file_path=None, disc_number=2, track_number=1, tags={"track_title": TagOperation.set(("Finale",))}),
+        TagRow(source_line=3, file_path=None, disc_number=1, track_number=1, tags={"track_title": TagOperation.set(("Opening",))}),
+    ]
+
+    results, errors = apply_rows(rows, DEFAULT_TAG_MAPPINGS, csv_path=csv_path, album_dir=album_dir, dry_run=True)
+
+    assert not errors
+    assert [result.resolved_path.name for result in results] == ["2-01 Finale.flac", "1-01 Opening.flac"]
+
+
 def test_apply_rows_supports_multi_value_updates_and_clear_operations(tmp_path: Path) -> None:
     csv_path = tmp_path / "tags.csv"
     flac_path = tmp_path / "track.flac"
@@ -80,7 +110,12 @@ def test_build_album_track_map_falls_back_to_sorted_order(tmp_path: Path) -> Non
     (album_dir / "a.flac").write_bytes(b"")
     (album_dir / "b.flac").write_bytes(b"")
 
-    track_map = build_album_track_map(album_dir, expected_track_numbers=[1, 2])
+    rows = [
+        TagRow(source_line=2, file_path=None, disc_number=None, track_number=1, tags={}),
+        TagRow(source_line=3, file_path=None, disc_number=None, track_number=2, tags={}),
+    ]
 
-    assert track_map[1].name == "a.flac"
-    assert track_map[2].name == "b.flac"
+    track_map = build_album_track_map(album_dir, rows)
+
+    assert track_map[(None, 1)].name == "a.flac"
+    assert track_map[(None, 2)].name == "b.flac"
